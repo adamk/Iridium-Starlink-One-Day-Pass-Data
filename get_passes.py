@@ -14,6 +14,7 @@ import sys
 import shutil
 import os
 import math
+import re
 import pandas as pd
 from skyfield.api import load, wgs84
 from itertools import islice
@@ -90,8 +91,8 @@ with open('passes.dat', 'w') as outfile:
         sat_count2 = 0
         sat_name = iridium_sats[sat_count3].replace(" ", "") + '.dat'
         with open(sat_name.replace(" ", "")) as infile:
-            lines = infile.readlines()
-            for line in lines:
+            
+            for line in infile:
                 if line.split(' ')[4] == '':
                     if line.split(' ')[5] == '':
                         if line.split(' ')[6] == '':
@@ -108,99 +109,67 @@ with open('passes.dat', 'w') as outfile:
 n=0
 output_file = "new_passes.dat"
 new_lines = []
+first = 0
 print('Removing duplicate timestamps...\n')
 with open('passes.dat', 'r') as infile, open(output_file, 'w') as outfile:
     for line in infile:
-        if n < len(iridium_sats)-1:
+        if n < len(iridium_sats):
             if line.strip() == iridium_sats[n].strip():
+                if first == 1:
+                    print(iridium_sats[n-1] + ' duplicates removed.')
                 outfile.write(iridium_sats[n] + '\n')
-                continue
-            elif line.strip() == iridium_sats[n+1].strip():
                 n += 1
                 new_lines = []
-                outfile.write(iridium_sats[n-1] + '\n')
-                print(iridium_sats[n-1] + ' duplicates removed.')
+                first = 1
+                continue
+                
             else:
                 time = line.split(' ')[3]
                 if time not in new_lines:
                     outfile.write(line)
-                    new_lines.append(time)
-        else:
-            time = line.split(' ')[3]
-            if time not in new_lines:
-                outfile.write(line)
-                new_lines.append(time)
-    print(iridium_sats[n] + ' duplicates removed.')     
+                    new_lines.append(time)    
+    else:
+        time = line.split(' ')[3]
+        if time not in new_lines:
+           outfile.write(line)
+           new_lines.append(time)    
+    print(iridium_sats[n-1] + ' duplicates removed.')
 
 n=0
-
-local_time = []
-utc_lines = []
-utc_count=0
 local_day = date_range[4:6]
 print('Converting UTC to Local...\n')
 with open('new_passes.dat', 'r') as infile, open('local_passes.dat', 'w') as outfile:
     for line in infile:
         if n < len(iridium_sats):
             if line.strip() == iridium_sats[n].strip():
+                n += 1       
                 continue
-            elif line.strip() == iridium_sats[n+1].strip():     
-                while utc_count < len(utc_lines):
-                    utc_time = utc_lines[utc_count].split(' ')[3]
-                    utc_day = utc_lines[utc_count].split(' ')[2]
-                    local_line = utc_lines[utc_count].replace(utc_time[0:8],local_time[utc_count]).replace(utc_day[0:2], local_day)
-                    outfile.write(local_line)
-                    utc_count += 1
-                utc_count = 0
-                n += 1
-                local_time = []
-                utc_lines = []
-                print(iridium_sats[n-1] + ' passes converted to local time.')                
             else:
                 utc = line.split(' ')[3]
                 local_hour = int(utc[0:2])-4
                 if local_hour < 0:
                     local_hour = 24 + local_hour
-                if local_hour > 0 and local_hour < 10:
+                elif local_hour > 0 and local_hour < 10:
                     local_hour = str(0) + str(local_hour)
-                if local_hour == 0:
+                elif local_hour == 0:
                     local_hour = str(0) + str(local_hour)
-                if utc.replace(utc[0:2], str(local_hour)) not in local_time:
-                    local_time.append(utc.replace(utc[0:2], str(local_hour)))
-                    utc_lines.append(line)
-                
-        else:
-            utc = line.split(' ')[3]
-            local_hour = int(utc[0:2])-4
-            if local_hour < 0:
-                local_hour = 24 + local_hour
-            if local_hour > 0 and local_hour < 10:
-                local_hour = str(0) + str(local_hour)
-            if local_hour == 0:
-                local_hour = str(0) + str(local_hour)
-            if utc.replace(utc[0:2], str(local_hour)) not in local_time:
-                local_time.append(utc.replace(utc[0:2], str(local_hour)))
-                utc_lines.append(line)
-                
-    print(iridium_sats[n] + ' times converted to local time.')
-    while utc_count < len(utc_lines):
-        utc_time = utc_lines[utc_count].split(' ')[3]
-        utc_day = utc_lines[utc_count].split(' ')[2]
-        local_line = utc_lines[utc_count].replace(utc_time[0:8],local_time[utc_count]).replace(utc_day[0:2], local_day)
-        outfile.write(local_line)
-        utc_count += 1
-    n += 1
-    print(iridium_sats[n] + ' times converted to local time.')   
+                else:
+                    local_hour = int(utc[0:2])-4
+                local_time = utc.replace(utc[0:2], str(local_hour))
+                utc_day = line.split(' ')[2]
+                local_line = re.sub(utc[0:8],local_time, line)
+                local_line = re.sub("\d+(?=\string)", local_day, line)
+                outfile.write(local_line) 
+    print('\nDone.')
+      
     
 n = 0
-
 output_file2 = 'num_passes.dat'
 dates = []
 
 print("\nSorting times...")
 with open('local_passes.dat', 'r') as infile, open(output_file2, 'w') as outfile:
-    lines = infile.readlines()
-    for line in lines:
+    for line in infile:
         dates.append((line.split(' ')[3].replace(':','')))
     dates_sorted = sorted(dates)
     time_dict = pd.DataFrame(dates_sorted, columns=["x"]).groupby('x').size().to_dict()
