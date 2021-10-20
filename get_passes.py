@@ -1,9 +1,9 @@
 # Script to pull latest Iridium TLEs from Celestrak, run PREDICT program to compute passes
-# for a given day and output to file 'passes.dat'
+# for a given day and output to file 'passes.dat' and 'local_passes.dat'
 
 # Also takes file 'new_passes.dat' (a file of Iridium NEXT passes converted to Local Time) and
 # outputs the number of satellites above the horizon at each 1-second timestamp in the one-day time 
-# period to file 'local_passes.dat'
+# period to file 'num_passes.dat'
 
 # Author: Adam Kimbrough
 # September 21, 2021
@@ -25,6 +25,7 @@ if os.path.exists('iridium.tle'):
     os.remove('iridium.tle')
 stations_url = 'http://celestrak.com/NORAD/elements/iridium-NEXT.txt'
 satellites = load.tle_file(stations_url, filename='iridium.tle')
+
 print('Loaded', len(satellites), 'Iridium satellites')
 
 by_name = {sat.name: sat for sat in satellites}
@@ -170,6 +171,7 @@ with open('local_passes.dat', 'r') as infile, open(output_file2, 'w') as outfile
         dates.append((line.split(' ')[3].replace(':','')))
     dates_sorted = sorted(dates)
     time_dict = pd.DataFrame(dates_sorted, columns=["x"]).groupby('x').size().to_dict()
+
 
     for key in time_dict:
         time = key[:2] + ':' + key[2:4] + ':' + key[4:]
