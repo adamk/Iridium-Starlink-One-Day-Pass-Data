@@ -1,7 +1,7 @@
-# Script to pull latest Iridium TLEs from Celestrak, run PREDICT program to compute passes
+# Script to pull latest Iridium TLEs from Celestrak and run PREDICT program to compute passes
 # for a given day and output to file 'passes.dat' and 'local_passes.dat'
 
-# Also takes file 'new_passes.dat' (a file of Iridium NEXT passes converted to Local Time) and
+# Also takes file 'new_passes.dat' (a file of IridiumNEXT passes converted to Local Time) and
 # outputs the number of satellites above the horizon at each 1-second timestamp in the one-day time 
 # period to file 'num_passes.dat'
 
@@ -20,31 +20,44 @@ from skyfield.api import load, wgs84
 from itertools import islice
 from datetime import datetime
 
+
+iridium_sats = []
+
+def get_iridium_satellite_names():
+    
+    # read the element file to get a list of names for the satellites
+    with open('iridium.txt', 'rt') as f:
+        for l in f:
+            if not re.match('^[12] ', l) and not l.startswith('DUMMY MASS'):
+                name = l.strip()
+                iridium_sats.append(name)
+    print('Loaded', len(iridium_sats), 'Iridium-NEXT satellites')
+    
 # Pull latest Iridium-NEXT TLE Data
-if os.path.exists('iridium.tle'):
-    os.remove('iridium.tle')
+if os.path.exists('iridium.txt'):
+    os.remove('iridium.txt')
 stations_url = 'http://celestrak.com/NORAD/elements/iridium-NEXT.txt'
-satellites = load.tle_file(stations_url, filename='iridium.tle')
+satellites = load.tle_file(stations_url, filename='iridium.txt')
 
-print('Loaded', len(satellites), 'Iridium satellites')
+get_iridium_satellite_names()
 
-by_name = {sat.name: sat for sat in satellites}
-iridium_sats = list(by_name.keys())
+#by_name = {sat.name: sat for sat in iridium_sats}
+#iridium_sats = list(by_name.keys())
 
 count = 0
 
 # Separate TLE data into multiple files for PREDICT to process w/o error (maximum TLE line limit)
-with open('iridium.tle', 'r') as infile:
-    with open('iridium1.tle', 'w') as outfile:
+with open('iridium.txt', 'r') as infile:
+    with open('iridium1.txt', 'w') as outfile:
         for TLE in list(islice(infile, 72)):
             outfile.write(TLE)
-    with open('iridium2.tle', 'w') as outfile:
+    with open('iridium2.txt', 'w') as outfile:
         for TLE in list(islice(infile, 72)):
             outfile.write(TLE)
-    with open('iridium3.tle', 'w') as outfile:
+    with open('iridium3.txt', 'w') as outfile:
         for TLE in list(islice(infile, 72)):
             outfile.write(TLE)
-    with open('iridium4.tle', 'w') as outfile:
+    with open('iridium4.txt', 'w') as outfile:
         for TLE in list(islice(infile, 72)):
             outfile.write(TLE)         
         
@@ -66,7 +79,7 @@ while k <= 3:
     count = 0
     while count < 24:
         cmdln_predict = 'predict -q predict.qth -t iridium' + \
-            str(k) + '.tle -f "' + iridium_sats[sat_count] + '" ' + start + ' ' + end + \
+            str(k) + '.txt -f "' + iridium_sats[sat_count] + '" ' + start + ' ' + end + \
             ' -o ' + iridium_sats[sat_count].replace(" ", "") + '.dat'
         print(cmdln_predict)
         os.system(cmdln_predict)
@@ -75,7 +88,7 @@ while k <= 3:
     k += 1
 count4 = 1
 while count4 <= 3:
-    cmdln_predict = 'predict -q predict.qth -t iridium4.tle -f "' + iridium_sats[sat_count] + '" '+ \
+    cmdln_predict = 'predict -q predict.qth -t iridium4.txt -f "' + iridium_sats[sat_count] + '" '+ \
     start + ' ' + end + ' -o ' + iridium_sats[sat_count].replace(" ", "") + '.dat'
     print(cmdln_predict)
     os.system(cmdln_predict)
@@ -90,15 +103,7 @@ with open('passes.dat', 'w') as outfile:
         sat_name = iridium_sats[sat_count3].replace(" ", "") + '.dat'
         with open(sat_name.replace(" ", "")) as infile:
             for line in infile:
-                if line.split(' ')[4] == '':
-                    if line.split(' ')[5] == '':
-                        if line.split(' ')[6] == '':
-                            if int(line.split(' ')[7]) > 0:
-                                outfile.write(line)
-                        elif int(line.split(' ')[6]) > 0:
-                            outfile.write(line)
-                    elif int(line.split(' ')[5]) > 0:
-                        outfile.write(line)
+                outfile.write(line.split()[4])
         print(sat_name + " passes merged")
         os.remove(sat_name)
         sat_count3 += 1
@@ -171,7 +176,6 @@ with open('local_passes.dat', 'r') as infile, open(output_file2, 'w') as outfile
         dates.append((line.split(' ')[3].replace(':','')))
     dates_sorted = sorted(dates)
     time_dict = pd.DataFrame(dates_sorted, columns=["x"]).groupby('x').size().to_dict()
-
 
     for key in time_dict:
         time = key[:2] + ':' + key[2:4] + ':' + key[4:]
