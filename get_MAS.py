@@ -11,7 +11,7 @@ dates = []
 #el_list1 = []
 #az_list1 = []
 time_angle_dict = {}
-line_list = []
+line_list = set([])
 
 # Function to find minimum angular separation from list of el and az at given timestamp
 def findMinDiff(el_arr,az_arr):
@@ -89,7 +89,7 @@ with open('local_passes.dat', 'r') as infile, open('MAS.dat', 'w') as outfile:
            
         if line_split[3] not in line_list:
             time_angle_dict[line_split[3]]= [[el], [az]]
-            line_list.append(line_split[3])
+            line_list.add(line_split[3])
 
         else:
             time_angle_dict[line_split[3]][0].append(el)
