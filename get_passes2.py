@@ -20,23 +20,54 @@ from skyfield.api import load, wgs84
 from itertools import islice
 from datetime import datetime
 
+starlink_sats = []
+removed = ['FALCON','TYVAK','CAPELLA']
+## FUNCTION TO REMOVE LOW PERIGEE SATS + OTHERS AND GENERATE SAT LIST
+def get_starlink_satellite_names():
+    from itertools import islice
+    # read the element file to get a list of names for the satellites
+    with open('starlink.txt', 'rt') as f:
+        for l in f:
+            if not re.match('^[12] ', l) and not l.find('DARKSAT') != -1 and not l.startswith('FALCON') and not l.startswith('TYVAK') and not l.startswith('CAPELLA'):
+                name = l.strip()
+                #print(name)
+                starlink_sats.append(name)
+    print('Loaded', len(starlink_sats), 'Starlink satellites')
+    
 # Pull latest Starlink TLE Data
-#if os.path.exists('starlink.tle'):
-    #os.remove('starlink.tle')
+if os.path.exists('starlink.txt'):
+    os.remove('starlink.txt')
 stations_url = 'https://celestrak.com/NORAD/elements/starlink.txt'
 satellites = load.tle_file(stations_url, filename='starlink.txt')
 
-print('Loaded', len(satellites), 'Starlink satellites')
+get_starlink_satellite_names()
 
-by_name = {sat.name: sat for sat in satellites}
-starlink_sats = list(by_name.keys())
+tle_file = open("starlink.txt", "r")
+lines = tle_file.readlines()
+tle_file.close()
+
+skip1 = False
+skip2 = False
+new_file = open("starlink.txt", "w")
+for line in lines:
+    if not line.startswith('FALCON') and not line.startswith('TYVAK') and not line.startswith('CAPELLA') and line.find('DARKSAT') == -1 and skip1 != True and skip2 != True:
+        new_file.write(line)
+    elif skip1 == True:
+        skip1 = False
+        skip2 = True
+        continue
+    elif skip2 == True:
+        skip2 = False
+        continue
+    else:
+        skip1 = True    
+new_file.close()
 
 count = 0
-
 # Separate TLE data into multiple files for PREDICT to process w/o error (maximum TLE line limit)
-with open('starlink.tle', 'r') as infile:
+with open('starlink.txt', 'r') as infile:
     for x in range(1,71):
-        with open('starlink'+str(x)+'.tle', 'w') as outfile:
+        with open('starlink'+str(x)+'.txt', 'w') as outfile:
             for TLE in list(islice(infile, 72)):
                 outfile.write(TLE)      
         
@@ -58,52 +89,47 @@ while k < 70:
     count = 0
     while count < 24:
         cmdln_predict = 'predict -q predict.qth -t starlink' + \
-            str(k) + '.tle -f "' + starlink_sats[sat_count] + '" ' + start + ' ' + end + \
+            str(k) + '.txt -f "' + starlink_sats[sat_count] + '" ' + start + ' ' + end + \
             ' -o ' + starlink_sats[sat_count].replace(" ", "") + '.dat'
         print(cmdln_predict)
         os.system(cmdln_predict)
         sat_count += 1
         count += 1
+    os.remove('starlink'+str(k)+'.txt')
     k += 1
+    
 
 count4 = 1
-while count4 <= 18:
-    cmdln_predict = 'predict -q predict.qth -t starlink70.tle -f "' + starlink_sats[sat_count] + '" '+ \
+while count4 <= 9:
+    cmdln_predict = 'predict -q predict.qth -t starlink70.txt -f "' + starlink_sats[sat_count] + '" '+ \
     start + ' ' + end + ' -o ' + starlink_sats[sat_count].replace(" ", "") + '.dat'
     print(cmdln_predict)
     os.system(cmdln_predict)
     count4 += 1
     sat_count += 1
+os.remove('starlink70.txt')
 
 # Write pass data into 'passes.dat'
 sat_count3 = 0
-with open('passes.dat', 'w') as outfile:
+with open('passes_starlink.dat', 'w') as outfile:
     while sat_count3 < len(starlink_sats):
         outfile.write(starlink_sats[sat_count3]+'\n')
         sat_count2 = 0
         sat_name = starlink_sats[sat_count3].replace(" ", "") + '.dat'
         with open(sat_name.replace(" ", "")) as infile:
             for line in infile:
-                if line.split(' ')[4] == '':
-                    if line.split(' ')[5] == '':
-                        if line.split(' ')[6] == '':
-                            if int(line.split(' ')[7]) > 0:
-                                outfile.write(line)
-                        elif int(line.split(' ')[6]) > 0:
-                            outfile.write(line)
-                    elif int(line.split(' ')[5]) > 0:
-                        outfile.write(line)
+                outfile.write(line.split()[4])
         print(sat_name + " passes merged")
         os.remove(sat_name)
         sat_count3 += 1
 
 # Remove the duplicate timestamps
 n=0
-output_file = "new_passes.dat"
+output_file = "new_passes_starlink.dat"
 new_lines = []
 first = 0
 print('Removing duplicate timestamps...\n')
-with open('passes.dat', 'r') as infile, open(output_file, 'w') as outfile:
+with open('passes_starlink.dat', 'r') as infile, open(output_file, 'w') as outfile:
     for line in infile:
         if n < len(starlink_sats):
             if line.strip() == starlink_sats[n].strip():
@@ -126,7 +152,7 @@ with open('passes.dat', 'r') as infile, open(output_file, 'w') as outfile:
 n=0
 local_day = date_range[4:6]
 print('Converting UTC to Local...\n')
-with open('new_passes.dat', 'r') as infile, open('local_passes.dat', 'w') as outfile:
+with open('new_passes_starlink.dat', 'r') as infile, open('local_passes_starlink.dat', 'w') as outfile:
     for line in infile:
         if n < len(starlink_sats):
             if line.strip() == starlink_sats[n].strip():
@@ -150,12 +176,12 @@ with open('new_passes.dat', 'r') as infile, open('local_passes.dat', 'w') as out
       
     
 n = 0
-output_file2 = 'num_passes.dat'
+output_file2 = 'num_passes_starlink.dat'
 dates = []
 
 # Sort the times from 00:00:00 to 23:59:59 and write the # of passes at each timestamp to 'num_passes.dat'
 print("\nSorting times...")
-with open('local_passes.dat', 'r') as infile, open(output_file2, 'w') as outfile:
+with open('local_passes_starlink.dat', 'r') as infile, open(output_file2, 'w') as outfile:
     for line in infile:
         dates.append((line.split(' ')[3].replace(':','')))
     dates_sorted = sorted(dates)
